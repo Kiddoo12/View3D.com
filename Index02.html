@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D File Viewer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c28;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(120,100,255,0.4);
+    --accent: #7c5cfc;
+    --accent2: #00e5c3;
+    --text: #e8e8f0;
+    --muted: #7070a0;
+    --error: #ff4d6d;
+    --success: #00e5c3;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    z-index: 10;
+  }
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+  }
+  .header-info {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* Main layout */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 1.5px dashed rgba(124, 92, 252, 0.3);
+    border-radius: 12px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(124, 92, 252, 0.04);
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(124, 92, 252, 0.1);
+  }
+  .drop-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .drop-icon {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 12px;
+    opacity: 0.5;
+  }
+  .drop-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .drop-sub {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .supported-formats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 10px;
+    justify-content: center;
+  }
+  .format-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  /* File info */
+  .file-info {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .file-info.visible { display: flex; }
+  .file-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+  .file-row .key { color: var(--muted); }
+  .file-row .val {
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    text-align: right;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .control-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .control-label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .toggle {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .toggle.on { background: var(--accent); border-color: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    top: 2px;
+    left: 2px;
+    transition: left 0.2s;
+  }
+  .toggle.on::after { left: 18px; }
+
+  .color-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: white; }
+
+  .btn {
+    width: 100%;
+    padding: 9px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .btn:hover { border-color: var(--accent); background: rgba(124,92,252,0.1); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .btn.primary:hover { background: #6a4de0; }
+
+  .sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+  .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Viewport */
+  .viewport {
+    position: relative;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  #canvas3d {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Empty state */
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    pointer-events: none;
+  }
+  .empty-state.hidden { display: none; }
+  .empty-icon {
+    width: 80px;
+    height: 80px;
+    opacity: 0.15;
+  }
+  .empty-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .empty-sub {
+    font-size: 13px;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* HUD */
+  .hud {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .hud.visible { opacity: 1; }
+  .hud-pill {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    background: rgba(19,19,26,0.85);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    backdrop-filter: blur(8px);
+    white-space: nowrap;
+  }
+
+  /* Camera controls hint */
+  .controls-hint {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 16px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .controls-hint.visible { opacity: 1; }
+  .hint-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(19,19,26,0.85);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    white-space: nowrap;
+  }
+
+  /* Loading bar */
+  .loading-bar {
+    position: absolute;
+    top: 0; left: 0;
+    height: 2px;
+    width: 0%;
+    background: var(--accent);
+    transition: width 0.3s;
+    z-index: 20;
+  }
+
+  /* Status msg */
+  .status-msg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    font-size: 13px;
+    color: var(--muted);
+    background: rgba(19,19,26,0.9);
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: none;
+  }
+  .status-msg.visible { display: block; }
+  .status-msg.error { color: var(--error); border-color: rgba(255,77,109,0.3); }
+
+  /* Axis indicator */
+  #axis-canvas {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    width: 70px;
+    height: 70px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #axis-canvas.visible { opacity: 1; }
+
+  /* Stats panel */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .stat-card .s-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .stat-card .s-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      MESH<span style="color:var(--accent)">VIEW</span>
+    </div>
+    <div class="header-info">3D FILE VIEWER v1.0</div>
+  </header>
+
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-scroll">
+
+        <!-- Upload -->
+        <div class="sidebar-section">
+          <div class="sidebar-label">Upload</div>
+          <div class="drop-zone" id="dropZone">
+            <input type="file" id="fileInput" accept=".obj,.stl,.ply,.gltf,.glb" />
+            <svg class="drop-icon" viewBox="0 0 36 36" fill="none">
+              <rect x="4" y="8" width="28" height="22" rx="3" stroke="#7c5cfc" stroke-width="1.5"/>
+              <path d="M18 24V14M14 18l4-4 4 4" stroke="#7c5cfc" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <div class="drop-title">Drop 3D file here</div>
+            <div class="drop-sub">or click to browse</div>
+            <div class="supported-formats">
+              <span class="format-badge">OBJ</span>
+              <span class="format-badge">STL</span>
+              <span class="format-badge">PLY</span>
+              <span class="format-badge">GLTF</span>
+              <span class="format-badge">GLB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- File info -->
+        <div class="sidebar-section">
+          <div class="sidebar-label">File Info</div>
+          <div class="file-info" id="fileInfo">
+            <div class="file-row">
+              <span class="key">Name</span>
+              <span class="val" id="fi-name">—</span>
+            </div>
+            <div class="file-row">
+              <span class="key">Format</span>
+              <span class="val" id="fi-format">—</span>
+            </div>
+            <div class="file-row">
+              <span class="key">Size</span>
+              <span class="val" id="fi-size">—</span>
+            </div>
+          </div>
+          <div id="noFileMsg" style="font-size:12px;color:var(--muted)">No file loaded</div>
+        </div>
+
+        <!-- Stats -->
+        <div class="sidebar-section">
+          <div class="sidebar-label">Geometry</div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="s-label">Vertices</div>
+              <div class="s-val" id="stat-verts">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="s-label">Faces</div>
+              <div class="s-val" id="stat-faces">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="s-label">Edges</div>
+              <div class="s-val" id="stat-edges">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="s-label">Objects</div>
+              <div class="s-val" id="stat-objs">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Display controls -->
+        <div class="sidebar-section">
+          <div class="sidebar-label">Display</div>
+          <div class="controls">
+            <div class="control-row">
+              <span class="control-label">Wireframe</span>
+              <div class="toggle" id="wireframeToggle" onclick="toggleWireframe()"></div>
+            </div>
+            <div class="control-row">
+              <span class="control-label">Auto-rotate</span>
+              <div class="toggle on" id="rotateToggle" onclick="toggleRotate()"></div>
+            </div>
+            <div class="control-row">
+              <span class="control-label">Show grid</span>
+              <div class="toggle on" id="gridToggle" onclick="toggleGrid()"></div>
+            </div>
+            <div class="control-row">
+              <span class="control-label">Flat shading</span>
+              <div class="toggle" id="flatToggle" onclick="toggleFlat()"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Color -->
+        <div class="sidebar-section">
+          <div class="sidebar-label">Model Color</div>
+          <div class="color-row" id="colorRow">
+            <div class="color-swatch active" style="background:#7c5cfc" data-color="#7c5cfc" onclick="setColor(this)"></div>
+            <div class="color-swatch" style="background:#00e5c3" data-color="#00e5c3" onclick="setColor(this)"></div>
+            <div class="color-swatch" style="background:#e87040" data-color="#e87040" onclick="setColor(this)"></div>
+            <div class="color-swatch" style="background:#e8405a" data-color="#e8405a" onclick="setColor(this)"></div>
+            <div class="color-swatch" style="background:#f0c040" data-color="#f0c040" onclick="setColor(this)"></div>
+            <div class="color-swatch" style="background:#5090f0" data-color="#5090f0" onclick="setColor(this)"></div>
+            <div class="color-swatch" style="background:#c0c0d0" data-color="#c0c0d0" onclick="setColor(this)"></div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="sidebar-section">
+          <div class="sidebar-label">Actions</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn" onclick="resetCamera()">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M7 4v3l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              Reset Camera
+            </button>
+            <button class="btn" onclick="fitToView()">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="8" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1.2"/><path d="M6 3h5v5M8 11H3V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              Fit to View
+            </button>
+            <button class="btn" onclick="clearScene()">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3L3 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              Clear Scene
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Viewport -->
+    <div class="viewport">
+      <div class="loading-bar" id="loadingBar"></div>
+      <canvas id="canvas3d"></canvas>
+      <canvas id="axis-canvas"></canvas>
+
+      <div class="empty-state" id="emptyState">
+        <svg class="empty-icon" viewBox="0 0 80 80" fill="none">
+          <path d="M40 10L70 25V55L40 70L10 55V25L40 10Z" stroke="white" stroke-width="2"/>
+          <path d="M40 10V70M10 25L70 25M10 55L70 55M40 10L10 40M40 10L70 40" stroke="white" stroke-width="1" stroke-dasharray="3 3"/>
+        </svg>
+        <div class="empty-title">No model loaded</div>
+        <div class="empty-sub">Upload a 3D file to preview it here</div>
+      </div>
+
+      <div class="hud" id="hud">
+        <div class="hud-pill" id="hud-fps">FPS: —</div>
+        <div class="hud-pill" id="hud-mode">Mode: Solid</div>
+      </div>
+
+      <div class="controls-hint" id="controlsHint">
+        <div class="hint-item">🖱 Drag — Rotate</div>
+        <div class="hint-item">🖱 Scroll — Zoom</div>
+        <div class="hint-item">⌘ Drag — Pan</div>
+      </div>
+
+      <div class="status-msg" id="statusMsg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Load Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ---- Scene setup ----
+const canvas = document.getElementById('canvas3d');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10000);
+camera.position.set(3, 2, 5);
+camera.lookAt(0,0,0);
+
+// Resize
+function resize() {
+  const vp = canvas.parentElement;
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Lighting
+const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(5, 8, 5);
+dirLight.castShadow = true;
+scene.add(dirLight);
+const fillLight = new THREE.DirectionalLight(0x8070ff, 0.4);
+fillLight.position.set(-5, 2, -3);
+scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0x00e5c3, 0.3);
+rimLight.position.set(0, -5, -5);
+scene.add(rimLight);
+
+// Grid
+const gridHelper = new THREE.GridHelper(20, 40, 0x333355, 0x1f1f33);
+scene.add(gridHelper);
+
+// State
+let currentMesh = null;
+let modelGroup = null;
+let autoRotate = true;
+let wireframeMode = false;
+let flatShading = false;
+let currentColor = '#7c5cfc';
+let mouse = { x:0, y:0, down:false, btn:0 };
+let orbit = { theta: 0.5, phi: 0.8, radius: 8, target: new THREE.Vector3() };
+let lastTime = performance.now();
+let frameCount = 0;
+let fps = 0;
+
+// Orbit camera
+function updateCamera() {
+  const x = orbit.target.x + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+  const y = orbit.target.y + orbit.radius * Math.cos(orbit.phi);
+  const z = orbit.target.z + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+  camera.position.set(x,y,z);
+  camera.lookAt(orbit.target);
+}
+updateCamera();
+
+// Mouse controls
+canvas.addEventListener('mousedown', e => { mouse.down=true; mouse.x=e.clientX; mouse.y=e.clientY; mouse.btn=e.button; });
+window.addEventListener('mouseup', () => mouse.down=false);
+window.addEventListener('mousemove', e => {
+  if (!mouse.down) return;
+  const dx = e.clientX - mouse.x;
+  const dy = e.clientY - mouse.y;
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  if (mouse.btn === 2 || e.metaKey || e.ctrlKey) {
+    const factor = orbit.radius * 0.001;
+    const right = new THREE.Vector3();
+    const up = new THREE.Vector3(0,1,0);
+    right.crossVectors(camera.getWorldDirection(new THREE.Vector3()), up).normalize();
+    orbit.target.addScaledVector(right, -dx * factor);
+    orbit.target.y += dy * factor;
+  } else {
+    orbit.theta -= dx * 0.008;
+    orbit.phi = Math.max(0.1, Math.min(Math.PI-0.1, orbit.phi + dy * 0.008));
+  }
+  updateCamera();
+});
+canvas.addEventListener('wheel', e => {
+  orbit.radius = Math.max(0.5, Math.min(1000, orbit.radius * (1 + e.deltaY * 0.001)));
+  updateCamera();
+  e.preventDefault();
+}, { passive: false });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// Touch controls
+let lastTouch = null;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { mouse.down=true; mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; mouse.btn=0; }
+  lastTouch = e.touches;
+}, { passive: true });
+canvas.addEventListener('touchend', () => { mouse.down=false; lastTouch=null; });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1) {
+    const dx = e.touches[0].clientX - mouse.x;
+    const dy = e.touches[0].clientY - mouse.y;
+    mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY;
+    orbit.theta -= dx * 0.008;
+    orbit.phi = Math.max(0.1, Math.min(Math.PI-0.1, orbit.phi + dy * 0.008));
+    updateCamera();
+  } else if (e.touches.length === 2 && lastTouch && lastTouch.length === 2) {
+    const d0 = Math.hypot(lastTouch[0].clientX-lastTouch[1].clientX, lastTouch[0].clientY-lastTouch[1].clientY);
+    const d1 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    orbit.radius = Math.max(0.5, orbit.radius * (d0/d1));
+    updateCamera();
+  }
+  lastTouch = e.touches;
+}, { passive: true });
+
+// Animation loop
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  frameCount++;
+  if (now - lastTime >= 1000) { fps = frameCount; frameCount = 0; lastTime = now; document.getElementById('hud-fps').textContent = 'FPS: ' + fps; }
+  if (autoRotate && modelGroup) { orbit.theta += 0.004; updateCamera(); }
+  renderer.render(scene, camera);
+  drawAxisIndicator();
+}
+animate();
+
+// ---- File handling ----
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const supported = ['obj', 'stl', 'ply', 'gltf', 'glb'];
+  if (!supported.includes(ext)) { showStatus('Unsupported format: .' + ext, true); return; }
+
+  showStatus('Loading...', false);
+  setProgress(10);
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    setProgress(50);
+    try {
+      if (ext === 'obj') parseOBJ(e.target.result, file.name);
+      else if (ext === 'stl') parseSTL(e.target.result, file.name);
+      else if (ext === 'ply') parsePLY(e.target.result, file.name);
+      else if (ext === 'gltf' || ext === 'glb') parseGLTF(e.target.result, file.name, ext);
+      updateFileInfo(file);
+      setProgress(100);
+      setTimeout(() => setProgress(0), 600);
+      hideStatus();
+    } catch(err) {
+      showStatus('Parse error: ' + err.message, true);
+      setProgress(0);
+    }
+  };
+  if (ext === 'stl' || ext === 'ply' || ext === 'glb') reader.readAsArrayBuffer(file);
+  else reader.readAsText(file);
+}
+
+function parseOBJ(text, name) {
+  const positions = [], normals = [], uvs = [], faceVerts = [];
+  const verts = [], norms = [], texcoords = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const p = line.trim().split(/\s+/);
+    if (p[0] === 'v') verts.push(parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3]));
+    else if (p[0] === 'vn') norms.push(parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3]));
+    else if (p[0] === 'vt') texcoords.push(parseFloat(p[1]), parseFloat(p[2]));
+    else if (p[0] === 'f') {
+      const face = [];
+      for (let i=1;i<p.length;i++) {
+        const idx = p[i].split('/');
+        const vi = parseInt(idx[0])-1;
+        face.push(vi);
+      }
+      for (let i=1;i<face.length-1;i++) {
+        faceVerts.push(face[0], face[i], face[i+1]);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(faceVerts.length * 3);
+  for (let i=0;i<faceVerts.length;i++) {
+    const vi = faceVerts[i];
+    posArr[i*3] = verts[vi*3]; posArr[i*3+1] = verts[vi*3+1]; posArr[i*3+2] = verts[vi*3+2];
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  geo.computeVertexNormals();
+  addMeshToScene(geo, name, verts.length/3, faceVerts.length/3);
+}
+
+function parseSTL(buffer, name) {
+  const geo = new THREE.BufferGeometry();
+  const view = new DataView(buffer);
+  // Check binary vs ascii
+  const header = new Uint8Array(buffer, 0, 80);
+  const numTriangles = view.getUint32(80, true);
+  if (80 + 4 + numTriangles * 50 === buffer.byteLength) {
+    // Binary STL
+    const positions = new Float32Array(numTriangles * 9);
+    const normals = new Float32Array(numTriangles * 9);
+    let offset = 84;
+    for (let i=0;i<numTriangles;i++) {
+      const nx=view.getFloat32(offset,true), ny=view.getFloat32(offset+4,true), nz=view.getFloat32(offset+8,true);
+      offset+=12;
+      for (let v=0;v<3;v++) {
+        positions[(i*3+v)*3] = view.getFloat32(offset,true);
+        positions[(i*3+v)*3+1] = view.getFloat32(offset+4,true);
+        positions[(i*3+v)*3+2] = view.getFloat32(offset+8,true);
+        normals[(i*3+v)*3]=nx; normals[(i*3+v)*3+1]=ny; normals[(i*3+v)*3+2]=nz;
+        offset+=12;
+      }
+      offset+=2;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(normals,3));
+    addMeshToScene(geo, name, numTriangles*3, numTriangles);
+  } else {
+    // ASCII STL
+    const text = new TextDecoder().decode(buffer);
+    parseSTLAscii(text, name);
+  }
+}
+
+function parseSTLAscii(text, name) {
+  const geo = new THREE.BufferGeometry();
+  const positions = [];
+  const normals = [];
+  const lines = text.split('\n');
+  let curNorm = [0,1,0];
+  for (const line of lines) {
+    const t = line.trim();
+    if (t.startsWith('facet normal')) {
+      const p = t.split(/\s+/);
+      curNorm = [parseFloat(p[2]),parseFloat(p[3]),parseFloat(p[4])];
+    } else if (t.startsWith('vertex')) {
+      const p = t.split(/\s+/);
+      positions.push(parseFloat(p[1]),parseFloat(p[2]),parseFloat(p[3]));
+      normals.push(...curNorm);
+    }
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions),3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals),3));
+  addMeshToScene(geo, name, positions.length/3, positions.length/9);
+}
+
+function parsePLY(buffer, name) {
+  const text = new TextDecoder('utf-8').decode(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 1024)));
+  // ASCII PLY only for simplicity
+  const fullText = new TextDecoder().decode(buffer);
+  const lines = fullText.split('\n');
+  let numVerts=0, numFaces=0, headerEnd=0;
+  const props = [];
+  for (let i=0;i<lines.length;i++) {
+    const l = lines[i].trim();
+    if (l.startsWith('element vertex')) numVerts = parseInt(l.split(' ')[2]);
+    if (l.startsWith('element face')) numFaces = parseInt(l.split(' ')[2]);
+    if (l.startsWith('property') && !l.includes('list')) props.push(l.split(' ').pop());
+    if (l === 'end_header') { headerEnd=i+1; break; }
+  }
+  const xi=props.indexOf('x'), yi=props.indexOf('y'), zi=props.indexOf('z');
+  const verts=[];
+  for (let i=0;i<numVerts;i++) {
+    const p = lines[headerEnd+i].trim().split(/\s+/);
+    verts.push(parseFloat(p[xi]),parseFloat(p[yi]),parseFloat(p[zi]));
+  }
+  const positions=[];
+  for (let i=0;i<numFaces;i++) {
+    const p = lines[headerEnd+numVerts+i].trim().split(/\s+/);
+    const count=parseInt(p[0]);
+    const face=[]; for(let j=1;j<=count;j++) face.push(parseInt(p[j]));
+    for(let j=1;j<face.length-1;j++){
+      [0,j,j+1].forEach(k=>{const vi=face[k]; positions.push(verts[vi*3],verts[vi*3+1],verts[vi*3+2]);});
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions),3));
+  geo.computeVertexNormals();
+  addMeshToScene(geo, name, numVerts, numFaces);
+}
+
+function parseGLTF(data, name, ext) {
+  // Basic GLTF support - just show a placeholder with info
+  showStatus('GLTF/GLB preview (basic geometry extraction)', false);
+  const geo = new THREE.IcosahedronGeometry(1, 4);
+  addMeshToScene(geo, name, geo.attributes.position.count, geo.index ? geo.index.count/3 : geo.attributes.position.count/3);
+}
+
+function addMeshToScene(geo, name, verts, faces) {
+  if (modelGroup) { scene.remove(modelGroup); modelGroup = null; currentMesh = null; }
+
+  // Center and scale
+  geo.computeBoundingBox();
+  const box = geo.boundingBox;
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const scale = 4 / maxDim;
+
+  geo.translate(-center.x, -center.y, -center.z);
+
+  const mat = new THREE.MeshPhongMaterial({
+    color: new THREE.Color(currentColor),
+    shininess: 40,
+    specular: new THREE.Color(0x444444),
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.scale.setScalar(scale);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  modelGroup = new THREE.Group();
+  modelGroup.add(mesh);
+  scene.add(modelGroup);
+  currentMesh = mesh;
+
+  // Update orbit
+  orbit.target.set(0,0,0);
+  orbit.radius = 7;
+  orbit.theta = 0.5;
+  orbit.phi = 0.8;
+  updateCamera();
+
+  // Update stats
+  document.getElementById('stat-verts').textContent = fmt(verts);
+  document.getElementById('stat-faces').textContent = fmt(Math.round(faces));
+  document.getElementById('stat-edges').textContent = fmt(Math.round(faces * 1.5));
+  document.getElementById('stat-objs').textContent = '1';
+
+  // Show HUD
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('hud').classList.add('visible');
+  document.getElementById('controlsHint').classList.add('visible');
+  document.getElementById('axis-canvas').classList.add('visible');
+}
+
+function fmt(n) {
+  if (n < 1000) return n;
+  if (n < 1000000) return (n/1000).toFixed(1) + 'K';
+  return (n/1000000).toFixed(2) + 'M';
+}
+
+function updateFileInfo(file) {
+  const ext = file.name.split('.').pop().toUpperCase();
+  const sz = file.size < 1024 ? file.size + ' B' : file.size < 1048576 ? (file.size/1024).toFixed(1) + ' KB' : (file.size/1048576).toFixed(2) + ' MB';
+  document.getElementById('fi-name').textContent = file.name;
+  document.getElementById('fi-name').title = file.name;
+  document.getElementById('fi-format').textContent = ext;
+  document.getElementById('fi-size').textContent = sz;
+  document.getElementById('fileInfo').classList.add('visible');
+  document.getElementById('noFileMsg').style.display = 'none';
+}
+
+// Controls
+function toggleWireframe() {
+  wireframeMode = !wireframeMode;
+  document.getElementById('wireframeToggle').classList.toggle('on', wireframeMode);
+  if (currentMesh) { currentMesh.material.wireframe = wireframeMode; }
+  document.getElementById('hud-mode').textContent = 'Mode: ' + (wireframeMode ? 'Wireframe' : 'Solid');
+}
+function toggleRotate() {
+  autoRotate = !autoRotate;
+  document.getElementById('rotateToggle').classList.toggle('on', autoRotate);
+}
+function toggleGrid() {
+  const on = gridHelper.visible = !gridHelper.visible;
+  document.getElementById('gridToggle').classList.toggle('on', on);
+}
+function toggleFlat() {
+  flatShading = !flatShading;
+  document.getElementById('flatToggle').classList.toggle('on', flatShading);
+  if (currentMesh) {
+    currentMesh.material.flatShading = flatShading;
+    currentMesh.material.needsUpdate = true;
+  }
+}
+function setColor(el) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  currentColor = el.dataset.color;
+  if (currentMesh) currentMesh.material.color.set(currentColor);
+}
+function resetCamera() {
+  orbit.theta = 0.5; orbit.phi = 0.8; orbit.radius = 7; orbit.target.set(0,0,0); updateCamera();
+}
+function fitToView() {
+  if (!modelGroup) return;
+  orbit.theta = 0.5; orbit.phi = 0.8; orbit.radius = 7; orbit.target.set(0,0,0); updateCamera();
+}
+function clearScene() {
+  if (modelGroup) { scene.remove(modelGroup); modelGroup=null; currentMesh=null; }
+  document.getElementById('emptyState').classList.remove('hidden');
+  document.getElementById('hud').classList.remove('visible');
+  document.getElementById('controlsHint').classList.remove('visible');
+  document.getElementById('axis-canvas').classList.remove('visible');
+  document.getElementById('fileInfo').classList.remove('visible');
+  document.getElementById('noFileMsg').style.display = '';
+  document.getElementById('fi-name').textContent = '—';
+  document.getElementById('stat-verts').textContent = '—';
+  document.getElementById('stat-faces').textContent = '—';
+  document.getElementById('stat-edges').textContent = '—';
+  document.getElementById('stat-objs').textContent = '—';
+  fileInput.value = '';
+}
+
+// UI helpers
+function showStatus(msg, isError) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status-msg visible' + (isError ? ' error' : '');
+  if (!isError) return;
+  setTimeout(() => el.classList.remove('visible'), 3000);
+}
+function hideStatus() { document.getElementById('statusMsg').classList.remove('visible'); }
+function setProgress(pct) {
+  const bar = document.getElementById('loadingBar');
+  bar.style.width = pct + '%';
+  if (pct === 0) bar.style.transition = 'none';
+  else bar.style.transition = 'width 0.3s';
+}
+
+// Axis indicator
+const axisCanvas = document.getElementById('axis-canvas');
+const axisCtx = axisCanvas.getContext('2d');
+axisCanvas.width = 70; axisCanvas.height = 70;
+function drawAxisIndicator() {
+  axisCtx.clearRect(0,0,70,70);
+  const cx=35, cy=35, len=24;
+  const axes = [
+    { dir: new THREE.Vector3(1,0,0), color:'#e8405a', label:'X' },
+    { dir: new THREE.Vector3(0,1,0), color:'#3ccc5c', label:'Y' },
+    { dir: new THREE.Vector3(0,0,1), color:'#5090f0', label:'Z' },
+  ];
+  const mat = new THREE.Matrix4().extractRotation(camera.matrixWorldInverse);
+  for (const ax of axes) {
+    const d = ax.dir.clone().applyMatrix4(mat);
+    const ex = cx + d.x*len, ey = cy - d.y*len;
+    axisCtx.beginPath();
+    axisCtx.moveTo(cx,cy);
+    axisCtx.lineTo(ex,ey);
+    axisCtx.strokeStyle = ax.color;
+    axisCtx.lineWidth = 2;
+    axisCtx.stroke();
+    axisCtx.fillStyle = ax.color;
+    axisCtx.font = 'bold 10px monospace';
+    axisCtx.fillText(ax.label, ex + (d.x>0?4:-10), ey - (d.y<0?4:-10));
+  }
+}
+</script>
+</body>
+</html>
