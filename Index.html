@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGE — 3D Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --c0:#05050a;
+  --c1:#0d0d17;
+  --c2:#14141f;
+  --c3:#1e1e2e;
+  --c4:#282840;
+  --border:rgba(255,255,255,0.06);
+  --border2:rgba(255,255,255,0.12);
+  --accent:#ff6b35;
+  --accent2:#ffb800;
+  --blue:#4488ff;
+  --green:#00d4a0;
+  --text:#f0eff8;
+  --muted:#6b6b8e;
+  --muted2:#9595b8;
+  --font:'Syne',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+
+html,body{height:100%;background:var(--c0);color:var(--text);font-family:var(--font);overflow:hidden;cursor:default}
+
+/* ── SCANLINE overlay ── */
+body::before{
+  content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+  pointer-events:none;z-index:1000;
+}
+
+/* ── Layout ── */
+.shell{display:grid;grid-template-rows:52px 1fr;height:100vh}
+
+/* ── Topbar ── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;
+  background:var(--c1);
+  border-bottom:1px solid var(--border);
+  position:relative;z-index:50;
+}
+.brand{
+  font-size:18px;font-weight:800;letter-spacing:0.08em;
+  display:flex;align-items:center;gap:10px;
+}
+.brand-mark{
+  width:28px;height:28px;border-radius:6px;
+  background:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+}
+.brand-mark svg{width:16px;height:16px}
+.brand-name{color:var(--text)}
+.brand-ver{
+  font-family:var(--mono);font-size:9px;font-weight:400;
+  color:var(--muted);letter-spacing:0.1em;
+  background:var(--c3);padding:2px 6px;border-radius:4px;
+  border:1px solid var(--border);margin-top:2px;
+}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.status-text{font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+/* ── Body ── */
+.body{display:grid;grid-template-columns:300px 1fr;overflow:hidden}
+
+/* ── Panel ── */
+.panel{
+  background:var(--c1);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+.panel-block{
+  padding:16px;
+  border-bottom:1px solid var(--border);
+}
+.panel-title{
+  font-family:var(--mono);font-size:9px;font-weight:500;
+  letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;
+  margin-bottom:12px;display:flex;align-items:center;gap:6px;
+}
+.panel-title::before{content:'//';color:var(--accent);font-size:8px}
+
+.panel-scroll{flex:1;overflow-y:auto}
+.panel-scroll::-webkit-scrollbar{width:3px}
+.panel-scroll::-webkit-scrollbar-track{background:transparent}
+.panel-scroll::-webkit-scrollbar-thumb{background:var(--c4);border-radius:2px}
+
+/* ── Drop zone ── */
+.dropzone{
+  border:1.5px dashed rgba(255,107,53,0.25);
+  border-radius:12px;
+  padding:28px 16px;
+  text-align:center;
+  cursor:pointer;
+  position:relative;
+  overflow:hidden;
+  transition:all 0.25s;
+  background:rgba(255,107,53,0.03);
+}
+.dropzone::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 100%,rgba(255,107,53,0.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.dropzone:hover,.dropzone.over{
+  border-color:var(--accent);
+  background:rgba(255,107,53,0.07);
+}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{
+  width:44px;height:44px;margin:0 auto 14px;
+  border:1.5px solid rgba(255,107,53,0.3);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,107,53,0.08);
+}
+.dz-icon svg{width:22px;height:22px;color:var(--accent)}
+.dz-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+.dz-sub{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+.dz-formats{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+.fmt{
+  font-family:var(--mono);font-size:9px;padding:2px 8px;
+  border-radius:20px;background:var(--c3);color:var(--muted2);
+  border:1px solid var(--border);letter-spacing:0.05em;
+}
+
+/* ── File card ── */
+.file-card{
+  background:var(--c2);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;
+  display:none;
+}
+.file-card.show{display:block}
+.file-card-header{
+  background:var(--accent);padding:10px 14px;
+  display:flex;align-items:center;gap:8px;
+}
+.file-card-icon{width:22px;height:22px;opacity:0.9}
+.file-card-name{font-size:12px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-card-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.kv{display:flex;justify-content:space-between;align-items:center}
+.kv .k{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.kv .v{font-family:var(--mono);font-size:10px;color:var(--muted2);font-weight:500}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat{
+  background:var(--c2);border:1px solid var(--border);
+  border-radius:8px;padding:10px 12px;
+  transition:border-color 0.2s;
+}
+.stat:hover{border-color:var(--border2)}
+.stat-label{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:4px}
+.stat-val{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--text)}
+.stat-val.accent{color:var(--accent)}
+
+/* ── Controls ── */
+.ctrl-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ctrl-row:last-child{margin-bottom:0}
+.ctrl-label{font-size:12px;color:var(--muted2)}
+
+/* Toggle */
+.tog{
+  width:38px;height:22px;border-radius:11px;
+  background:var(--c3);border:1px solid var(--border);
+  cursor:pointer;position:relative;transition:all 0.2s;flex-shrink:0;
+}
+.tog.on{background:var(--accent);border-color:var(--accent)}
+.tog::after{
+  content:'';position:absolute;
+  width:16px;height:16px;border-radius:50%;background:white;
+  top:2px;left:2px;transition:left 0.2s;
+  box-shadow:0 1px 4px rgba(0,0,0,0.4);
+}
+.tog.on::after{left:18px}
+
+/* Select */
+.sel{
+  background:var(--c3);border:1px solid var(--border);
+  border-radius:6px;color:var(--muted2);font-family:var(--mono);
+  font-size:10px;padding:4px 8px;cursor:pointer;
+  outline:none;transition:border-color 0.2s;
+}
+.sel:focus{border-color:var(--accent)}
+
+/* Color swatches */
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.swatch{
+  width:24px;height:24px;border-radius:6px;cursor:pointer;
+  border:2px solid transparent;transition:all 0.15s;position:relative;
+}
+.swatch::after{
+  content:'';position:absolute;inset:-4px;border-radius:9px;
+  border:2px solid transparent;transition:border-color 0.15s;
+}
+.swatch.active::after{border-color:white}
+.swatch:hover{transform:scale(1.15)}
+
+/* Buttons */
+.btn{
+  width:100%;padding:9px 14px;border-radius:8px;
+  border:1px solid var(--border);background:var(--c3);
+  color:var(--muted2);font-family:var(--font);font-size:12px;font-weight:500;
+  cursor:pointer;transition:all 0.15s;display:flex;align-items:center;
+  justify-content:center;gap:6px;letter-spacing:0.02em;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(255,107,53,0.08)}
+.btn svg{width:13px;height:13px}
+.btn-group{display:flex;flex-direction:column;gap:6px}
+
+/* ── Viewport ── */
+.viewport{position:relative;background:var(--c0);overflow:hidden}
+#c{position:absolute;inset:0;width:100%;height:100%}
+
+/* Grid lines on bg */
+.viewport::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);
+  background-size:40px 40px;
+  pointer-events:none;z-index:1;
+}
+
+/* Empty */
+.empty{
+  position:absolute;inset:0;z-index:5;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  pointer-events:none;transition:opacity 0.4s;
+}
+.empty.gone{opacity:0;pointer-events:none}
+.empty-ring{
+  width:120px;height:120px;border-radius:50%;
+  border:1px solid rgba(255,107,53,0.15);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.empty-ring::before{
+  content:'';position:absolute;inset:12px;border-radius:50%;
+  border:1px solid rgba(255,107,53,0.1);
+}
+.empty-ring::after{
+  content:'';position:absolute;inset:24px;border-radius:50%;
+  border:1px dashed rgba(255,107,53,0.12);
+  animation:spin 20s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-cube{width:40px;height:40px;opacity:0.2}
+.empty-label{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:0.05em}
+.empty-hint{font-family:var(--mono);font-size:10px;color:var(--muted);opacity:0.5}
+
+/* HUD overlays */
+.hud-tl{position:absolute;top:14px;left:14px;z-index:10;display:flex;flex-direction:column;gap:6px}
+.hud-tr{position:absolute;top:14px;right:14px;z-index:10;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.hud-br{position:absolute;bottom:14px;right:14px;z-index:10;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.hud-bc{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:8px}
+
+.hud-chip{
+  font-family:var(--mono);font-size:10px;color:var(--muted2);
+  background:rgba(5,5,10,0.82);border:1px solid var(--border);
+  padding:4px 10px;border-radius:20px;backdrop-filter:blur(12px);
+  white-space:nowrap;letter-spacing:0.04em;
+}
+.hud-chip.accent{color:var(--accent);border-color:rgba(255,107,53,0.25)}
+.hud-chip.green{color:var(--green);border-color:rgba(0,212,160,0.25)}
+
+/* Progress bar */
+.progress{
+  position:absolute;top:0;left:0;right:0;height:2px;z-index:30;
+  background:var(--c3);overflow:hidden;
+}
+.progress-bar{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  transition:width 0.3s;
+}
+
+/* Toast */
+.toast{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:40;font-family:var(--mono);font-size:12px;
+  background:rgba(5,5,10,0.95);border:1px solid var(--border2);
+  padding:12px 20px;border-radius:10px;backdrop-filter:blur(20px);
+  display:none;white-space:nowrap;
+}
+.toast.show{display:block}
+.toast.err{color:#ff4d6d;border-color:rgba(255,77,109,0.3)}
+.toast.ok{color:var(--green);border-color:rgba(0,212,160,0.3)}
+.toast.info{color:var(--muted2)}
+
+/* Axis canvas */
+#ax{position:absolute;bottom:14px;right:14px;width:72px;height:72px;z-index:10;pointer-events:none;opacity:0;transition:opacity 0.4s}
+#ax.show{opacity:1}
+
+/* Invisible overlay indicator when dragging file over viewport */
+.vp-drop-hint{
+  position:absolute;inset:0;z-index:20;
+  border:2px dashed var(--accent);border-radius:0;
+  background:rgba(255,107,53,0.05);
+  display:none;align-items:center;justify-content:center;
+  font-size:18px;font-weight:700;color:var(--accent);letter-spacing:0.1em;
+  pointer-events:none;
+}
+.vp-drop-hint.show{display:flex}
+
+/* Render mode badge */
+.mode-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:9px;letter-spacing:0.1em;
+  padding:3px 8px;border-radius:20px;
+  background:rgba(5,5,10,0.82);border:1px solid var(--border);
+  color:var(--muted2);
+}
+.mode-dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" fill="white" opacity="0.9"/>
+          <path d="M8 2V14M2 5.5L14 10.5M14 5.5L2 10.5" stroke="rgba(0,0,0,0.3)" stroke-width="0.7"/>
+        </svg>
+      </div>
+      <span class="brand-name">FORGE</span>
+      <span class="brand-ver">3D VIEWER</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot"></div>
+      <span class="status-text">READY</span>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- Panel -->
+    <div class="panel">
+      <div class="panel-scroll">
+
+        <!-- Upload -->
+        <div class="panel-block">
+          <div class="panel-title">Upload File</div>
+          <div class="dropzone" id="dz">
+            <input type="file" id="fi" accept=".obj,.stl,.ply,.gltf,.glb">
+            <div class="dz-icon">
+              <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <path d="M11 14V4M7 8l4-4 4 4"/>
+                <path d="M3 16v1a2 2 0 002 2h12a2 2 0 002-2v-1"/>
+              </svg>
+            </div>
+            <div class="dz-title">Drop 3D file here</div>
+            <div class="dz-sub">or click to browse your files</div>
+            <div class="dz-formats">
+              <span class="fmt">OBJ</span>
+              <span class="fmt">STL</span>
+              <span class="fmt">PLY</span>
+              <span class="fmt">GLTF</span>
+              <span class="fmt">GLB</span>
+            </div>
+          </div>
+
+          <div style="height:10px"></div>
+
+          <!-- File info card -->
+          <div class="file-card" id="fc">
+            <div class="file-card-header">
+              <svg class="file-card-icon" viewBox="0 0 22 22" fill="none" stroke="white" stroke-width="1.5">
+                <path d="M11 2L19 6V16L11 20L3 16V6L11 2Z"/>
+              </svg>
+              <span class="file-card-name" id="fc-name">—</span>
+            </div>
+            <div class="file-card-body">
+              <div class="kv"><span class="k">FORMAT</span><span class="v" id="fc-fmt">—</span></div>
+              <div class="kv"><span class="k">SIZE</span><span class="v" id="fc-sz">—</span></div>
+              <div class="kv"><span class="k">LOADED</span><span class="v" id="fc-time">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Geometry stats -->
+        <div class="panel-block">
+          <div class="panel-title">Geometry</div>
+          <div class="stats-grid">
+            <div class="stat"><div class="stat-label">VERTICES</div><div class="stat-val accent" id="sv">—</div></div>
+            <div class="stat"><div class="stat-label">FACES</div><div class="stat-val accent" id="sf">—</div></div>
+            <div class="stat"><div class="stat-label">EDGES</div><div class="stat-val" id="se">—</div></div>
+            <div class="stat"><div class="stat-label">OBJECTS</div><div class="stat-val" id="so">—</div></div>
+          </div>
+        </div>
+
+        <!-- Render -->
+        <div class="panel-block">
+          <div class="panel-title">Render</div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">Render mode</span>
+            <select class="sel" id="renderMode" onchange="onRenderMode()">
+              <option value="solid">Solid</option>
+              <option value="wireframe">Wireframe</option>
+              <option value="points">Points</option>
+              <option value="flat">Flat</option>
+              <option value="normal">Normal map</option>
+            </select>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">Auto-rotate</span>
+            <div class="tog on" id="togRot" onclick="togRot()"></div>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">Grid floor</span>
+            <div class="tog on" id="togGrid" onclick="togGrid()"></div>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">Shadows</span>
+            <div class="tog on" id="togShadow" onclick="togShadow()"></div>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-label">Background</span>
+            <div class="tog" id="togBg" onclick="togBg()"></div>
+          </div>
+        </div>
+
+        <!-- Color -->
+        <div class="panel-block">
+          <div class="panel-title">Material Color</div>
+          <div class="swatches" id="swatchRow">
+            <div class="swatch active" data-c="#ff6b35" style="background:#ff6b35" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#ffb800" style="background:#ffb800" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#00d4a0" style="background:#00d4a0" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#4488ff" style="background:#4488ff" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#d44fff" style="background:#d44fff" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#ff3366" style="background:#ff3366" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#c8c8e0" style="background:#c8c8e0" onclick="pickColor(this)"></div>
+            <div class="swatch" data-c="#808090" style="background:#808090" onclick="pickColor(this)"></div>
+          </div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+            <span class="ctrl-label">Custom</span>
+            <input type="color" id="customColor" value="#ff6b35" style="width:32px;height:22px;border:1px solid var(--border);border-radius:5px;background:var(--c3);cursor:pointer" onchange="customColor(this)">
+          </div>
+        </div>
+
+        <!-- Lighting -->
+        <div class="panel-block">
+          <div class="panel-title">Lighting</div>
+          <div class="ctrl-row" style="align-items:flex-start;flex-direction:column;gap:6px">
+            <span class="ctrl-label">Ambient intensity</span>
+            <input type="range" id="ambInt" min="0" max="2" step="0.05" value="0.6" style="width:100%" oninput="setAmbient(this.value)">
+          </div>
+          <div class="ctrl-row" style="align-items:flex-start;flex-direction:column;gap:6px;margin-top:8px">
+            <span class="ctrl-label">Light intensity</span>
+            <input type="range" id="lightInt" min="0" max="4" step="0.1" value="1.5" style="width:100%" oninput="setLight(this.value)">
+          </div>
+          <div style="margin-top:10px" class="ctrl-row">
+            <span class="ctrl-label">Env light preset</span>
+            <select class="sel" id="envPreset" onchange="setEnvPreset()">
+              <option value="studio">Studio</option>
+              <option value="sunset">Sunset</option>
+              <option value="cool">Cool</option>
+              <option value="warm">Warm</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Camera -->
+        <div class="panel-block">
+          <div class="panel-title">Camera</div>
+          <div class="btn-group">
+            <button class="btn" onclick="resetCam()">
+              <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M6.5 4v2.5l1.5 1"/></svg>
+              Reset view
+            </button>
+            <button class="btn" onclick="fitView()">
+              <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="8" y="8" width="4" height="4" rx="0.5"/><path d="M5 2h6v6M8 11H2V5"/></svg>
+              Fit to view
+            </button>
+            <button class="btn" onclick="setView('top')">
+              <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6.5" cy="6.5" r="5"/><line x1="6.5" y1="1.5" x2="6.5" y2="11.5"/><line x1="1.5" y1="6.5" x2="11.5" y2="6.5"/></svg>
+              Top view
+            </button>
+            <button class="btn" onclick="setView('front')">
+              <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="9" height="9" rx="1"/></svg>
+              Front view
+            </button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="panel-block">
+          <div class="panel-title">Actions</div>
+          <div class="btn-group">
+            <button class="btn" onclick="takeScreenshot()">
+              <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1" y="2.5" width="11" height="8" rx="1"/><circle cx="6.5" cy="6.5" r="2"/><path d="M4.5 2.5V1.5h4v1"/></svg>
+              Screenshot
+            </button>
+            <button class="btn" onclick="clearScene()" style="border-color:rgba(255,77,109,0.2);color:#ff4d6d" onmouseover="this.style.background='rgba(255,77,109,0.08)'" onmouseout="this.style.background=''">
+              <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2 2l9 9M11 2L2 11"/></svg>
+              Clear scene
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Viewport -->
+    <div class="viewport" id="vp">
+      <div class="progress"><div class="progress-bar" id="prog"></div></div>
+      <canvas id="c"></canvas>
+      <canvas id="ax"></canvas>
+
+      <!-- Viewport drop hint -->
+      <div class="vp-drop-hint" id="vpHint">DROP 3D FILE HERE</div>
+
+      <!-- Empty state -->
+      <div class="empty" id="empty">
+        <div class="empty-ring">
+          <svg class="empty-cube" viewBox="0 0 40 40" fill="none">
+            <path d="M20 4L36 13V27L20 36L4 27V13L20 4Z" stroke="white" stroke-width="1.5"/>
+            <path d="M20 4V36M4 13L36 27M36 13L4 27" stroke="white" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>
+          </svg>
+        </div>
+        <div class="empty-label">NO MODEL LOADED</div>
+        <div class="empty-hint">Upload OBJ · STL · PLY · GLTF · GLB</div>
+      </div>
+
+      <!-- HUD top-left -->
+      <div class="hud-tl" id="hudTL" style="opacity:0;transition:opacity 0.4s">
+        <div class="hud-chip accent" id="hFps">FPS —</div>
+        <div class="hud-chip" id="hMode">SOLID</div>
+      </div>
+
+      <!-- HUD top-right -->
+      <div class="hud-tr" id="hudTR" style="opacity:0;transition:opacity 0.4s">
+        <div class="hud-chip green" id="hLoaded">READY</div>
+      </div>
+
+      <!-- HUD bottom-center hints -->
+      <div class="hud-bc" id="hudHints" style="opacity:0;transition:opacity 0.4s">
+        <div class="hud-chip">🖱 Drag — Rotate</div>
+        <div class="hud-chip">⚙ Scroll — Zoom</div>
+        <div class="hud-chip">⌘/Ctrl + Drag — Pan</div>
+      </div>
+
+      <!-- Axis gizmo -->
+      <canvas id="ax" style="position:absolute;bottom:60px;right:14px;width:72px;height:72px;z-index:10;pointer-events:none;opacity:0;transition:opacity 0.4s" id="axc"></canvas>
+
+      <!-- Toast -->
+      <div class="toast" id="toast"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ──────────────────────────────────────
+//  SCENE SETUP
+// ──────────────────────────────────────
+const canvas = document.getElementById('c');
+const vp = document.getElementById('vp');
+const axCanvas = document.createElement('canvas');
+axCanvas.width = 72; axCanvas.height = 72;
+axCanvas.style.cssText = 'position:absolute;bottom:60px;right:14px;width:72px;height:72px;z-index:10;pointer-events:none;opacity:0;transition:opacity 0.4s;image-rendering:crisp-edges';
+vp.appendChild(axCanvas);
+const axCtx = axCanvas.getContext('2d');
+
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.setClearColor(0x05050a, 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.001, 100000);
+
+// Resize
+function resize(){
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Lights ──
+const ambLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambLight);
+
+const sunLight = new THREE.DirectionalLight(0xfff5e0, 1.5);
+sunLight.position.set(8, 12, 6);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.1;
+sunLight.shadow.camera.far = 500;
+sunLight.shadow.camera.left = -20;
+sunLight.shadow.camera.right = 20;
+sunLight.shadow.camera.top = 20;
+sunLight.shadow.camera.bottom = -20;
+sunLight.shadow.bias = -0.0001;
+scene.add(sunLight);
+
+const fillLight = new THREE.DirectionalLight(0x8090ff, 0.4);
+fillLight.position.set(-6, 2, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xff6b35, 0.25);
+rimLight.position.set(0, -8, -6);
+scene.add(rimLight);
+
+// ── Grid ──
+const grid = new THREE.GridHelper(40, 80, 0x1a1a30, 0x111120);
+grid.position.y = 0;
+scene.add(grid);
+
+// ── Shadow plane ──
+const shadowGeo = new THREE.PlaneGeometry(40, 40);
+const shadowMat = new THREE.ShadowMaterial({opacity:0.25});
+const shadowPlane = new THREE.Mesh(shadowGeo, shadowMat);
+shadowPlane.rotation.x = -Math.PI/2;
+shadowPlane.receiveShadow = true;
+scene.add(shadowPlane);
+
+// ──────────────────────────────────────
+//  ORBIT STATE
+// ──────────────────────────────────────
+const orbit = {
+  theta: 0.6, phi: 1.1, radius: 8,
+  target: new THREE.Vector3(),
+  autoRot: true
+};
+
+function applyCamera(){
+  const {theta, phi, radius, target} = orbit;
+  camera.position.set(
+    target.x + radius * Math.sin(phi)*Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi)*Math.cos(theta)
+  );
+  camera.lookAt(target);
+}
+applyCamera();
+
+// ── Mouse ──
+let md = false, mBtn = 0, mx = 0, my = 0;
+canvas.addEventListener('mousedown', e=>{md=true;mBtn=e.button;mx=e.clientX;my=e.clientY;orbit.autoRot=false;document.getElementById('togRot').classList.remove('on');});
+window.addEventListener('mouseup', ()=>md=false);
+window.addEventListener('mousemove', e=>{
+  if(!md) return;
+  const dx=e.clientX-mx, dy=e.clientY-my;
+  mx=e.clientX; my=e.clientY;
+  if(mBtn===2||e.ctrlKey||e.metaKey){
+    const f = orbit.radius*0.0012;
+    const r = new THREE.Vector3().crossVectors(camera.getWorldDirection(new THREE.Vector3()), new THREE.Vector3(0,1,0)).normalize();
+    orbit.target.addScaledVector(r, -dx*f);
+    orbit.target.y += dy*f;
+  } else {
+    orbit.theta -= dx*0.007;
+    orbit.phi = Math.max(0.05, Math.min(Math.PI-0.05, orbit.phi+dy*0.007));
+  }
+  applyCamera();
+});
+canvas.addEventListener('wheel', e=>{
+  orbit.radius = Math.max(0.2, Math.min(5000, orbit.radius*(1+e.deltaY*0.001)));
+  applyCamera();
+  e.preventDefault();
+},{passive:false});
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+
+// Touch
+let lt=null;
+canvas.addEventListener('touchstart', e=>{
+  if(e.touches.length===1){md=true;mBtn=0;mx=e.touches[0].clientX;my=e.touches[0].clientY;orbit.autoRot=false;}
+  lt=Array.from(e.touches);
+},{passive:true});
+canvas.addEventListener('touchend', ()=>{md=false;lt=null;});
+canvas.addEventListener('touchmove', e=>{
+  if(e.touches.length===1){
+    const dx=e.touches[0].clientX-mx, dy=e.touches[0].clientY-my;
+    mx=e.touches[0].clientX;my=e.touches[0].clientY;
+    orbit.theta-=dx*0.007;
+    orbit.phi=Math.max(0.05,Math.min(Math.PI-0.05,orbit.phi+dy*0.007));
+    applyCamera();
+  } else if(e.touches.length===2&&lt&&lt.length===2){
+    const d0=Math.hypot(lt[0].clientX-lt[1].clientX,lt[0].clientY-lt[1].clientY);
+    const d1=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    orbit.radius=Math.max(0.2,orbit.radius*(d0/d1));
+    applyCamera();
+  }
+  lt=Array.from(e.touches);
+},{passive:true});
+
+// ──────────────────────────────────────
+//  STATE
+// ──────────────────────────────────────
+let modelGroup = null;
+let meshes = [];
+let matColor = '#ff6b35';
+let renderMode = 'solid';
+let fpsCount=0, fpsTime=performance.now(), fps=0;
+let bgLight = false;
+
+// ──────────────────────────────────────
+//  ANIMATION LOOP
+// ──────────────────────────────────────
+function loop(){
+  requestAnimationFrame(loop);
+  fpsCount++;
+  const now=performance.now();
+  if(now-fpsTime>=1000){fps=fpsCount;fpsCount=0;fpsTime=now;document.getElementById('hFps').textContent='FPS '+fps;}
+  if(orbit.autoRot&&modelGroup){orbit.theta+=0.003;applyCamera();}
+  renderer.render(scene, camera);
+  drawAxis();
+}
+loop();
+
+// ──────────────────────────────────────
+//  AXIS GIZMO
+// ──────────────────────────────────────
+function drawAxis(){
+  if(!modelGroup) return;
+  axCtx.clearRect(0,0,72,72);
+  const cx=36,cy=36,len=26;
+  const rm = new THREE.Matrix4().extractRotation(camera.matrixWorldInverse);
+  const axes=[
+    {d:new THREE.Vector3(1,0,0),color:'#ff4466',label:'X'},
+    {d:new THREE.Vector3(0,1,0),color:'#44cc66',label:'Y'},
+    {d:new THREE.Vector3(0,0,1),color:'#4488ff',label:'Z'},
+  ];
+  // Sort by depth (draw back first)
+  axes.forEach(a=>{a.d2=a.d.clone().applyMatrix4(rm);a.depth=a.d2.z;});
+  axes.sort((a,b)=>a.depth-b.depth);
+  for(const ax of axes){
+    const ex=cx+ax.d2.x*len, ey=cy-ax.d2.y*len;
+    axCtx.beginPath();axCtx.moveTo(cx,cy);axCtx.lineTo(ex,ey);
+    axCtx.strokeStyle=ax.color;axCtx.lineWidth=2.5;axCtx.lineCap='round';axCtx.stroke();
+    axCtx.beginPath();axCtx.arc(ex,ey,4,0,Math.PI*2);axCtx.fillStyle=ax.color;axCtx.fill();
+    axCtx.fillStyle=ax.color;axCtx.font='bold 9px JetBrains Mono,monospace';axCtx.textAlign='center';axCtx.textBaseline='middle';
+    axCtx.fillText(ax.label,ex+(ax.d2.x>0?12:-12),ey-(ax.d2.y>0?8:-8));
+  }
+}
+
+// ──────────────────────────────────────
+//  FILE INPUT
+// ──────────────────────────────────────
+const dz = document.getElementById('dz');
+const fi = document.getElementById('fi');
+
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fi.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+// Drag over viewport
+vp.addEventListener('dragover',e=>{e.preventDefault();document.getElementById('vpHint').classList.add('show');});
+vp.addEventListener('dragleave',()=>document.getElementById('vpHint').classList.remove('show'));
+vp.addEventListener('drop',e=>{
+  e.preventDefault();document.getElementById('vpHint').classList.remove('show');
+  if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);
+});
+
+function loadFile(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(!['obj','stl','ply','gltf','glb'].includes(ext)){showToast('Unsupported: .'+ext,'err');return;}
+  const t0=Date.now();
+  showToast('Loading '+file.name+'…','info');
+  setProgress(15);
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    setProgress(55);
+    try{
+      if(ext==='obj') parseOBJ(ev.target.result, file.name);
+      else if(ext==='stl') parseSTL(ev.target.result, file.name);
+      else if(ext==='ply') parsePLY(ev.target.result, file.name);
+      else if(ext==='gltf'||ext==='glb') parseFallback(file.name);
+      updateFileCard(file, t0);
+      setProgress(100);
+      setTimeout(()=>setProgress(0),700);
+      showToast('Loaded in '+((Date.now()-t0))+'ms','ok');
+    }catch(err){
+      showToast('Parse error: '+err.message,'err');
+      setProgress(0);
+    }
+  };
+  reader.onerror=()=>{showToast('File read error','err');setProgress(0);};
+  if(ext==='stl'||ext==='ply'||ext==='glb') reader.readAsArrayBuffer(file);
+  else reader.readAsText(file);
+}
+
+// ──────────────────────────────────────
+//  PARSERS
+// ──────────────────────────────────────
+function parseOBJ(text, name){
+  const verts=[],norms=[],uvs=[];
+  const faces=[];
+  for(const raw of text.split('\n')){
+    const l=raw.trim();
+    if(!l||l[0]==='#') continue;
+    const p=l.split(/\s+/);
+    if(p[0]==='v'){verts.push(+p[1],+p[2],+p[3]);}
+    else if(p[0]==='vn'){norms.push(+p[1],+p[2],+p[3]);}
+    else if(p[0]==='vt'){uvs.push(+p[1],+p[2]);}
+    else if(p[0]==='f'){
+      const fv=[];
+      for(let i=1;i<p.length;i++){const s=p[i].split('/');fv.push({v:+s[0]-1,vt:s[1]?+s[1]-1:-1,vn:s[2]?+s[2]-1:-1});}
+      for(let i=1;i<fv.length-1;i++) faces.push(fv[0],fv[i],fv[i+1]);
+    }
+  }
+  const pos=new Float32Array(faces.length*3);
+  const nor=new Float32Array(faces.length*3);
+  for(let i=0;i<faces.length;i++){
+    const {v,vn}=faces[i];
+    pos[i*3]=verts[v*3]; pos[i*3+1]=verts[v*3+1]; pos[i*3+2]=verts[v*3+2];
+    if(vn>=0){nor[i*3]=norms[vn*3];nor[i*3+1]=norms[vn*3+1];nor[i*3+2]=norms[vn*3+2];}
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  if(norms.length) geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+  else geo.computeVertexNormals();
+  addToScene(geo, name, verts.length/3, faces.length/3);
+}
+
+function parseSTL(buf, name){
+  const headerStr=new TextDecoder().decode(new Uint8Array(buf,0,80));
+  const isBin=!headerStr.trimStart().toLowerCase().startsWith('solid')||new DataView(buf).getUint32(80,true)*50+84===buf.byteLength;
+  if(isBin){
+    const dv=new DataView(buf);
+    const ntri=dv.getUint32(80,true);
+    const pos=new Float32Array(ntri*9), nor=new Float32Array(ntri*9);
+    let off=84;
+    for(let i=0;i<ntri;i++){
+      const nx=dv.getFloat32(off,true),ny=dv.getFloat32(off+4,true),nz=dv.getFloat32(off+8,true);off+=12;
+      for(let v=0;v<3;v++){
+        const b=i*9+v*3;
+        pos[b]=dv.getFloat32(off,true);pos[b+1]=dv.getFloat32(off+4,true);pos[b+2]=dv.getFloat32(off+8,true);off+=12;
+        nor[b]=nx;nor[b+1]=ny;nor[b+2]=nz;
+      }
+      off+=2;
+    }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+    addToScene(geo,name,ntri*3,ntri);
+  } else {
+    const text=new TextDecoder().decode(buf);
+    const pos=[],nor=[];
+    let cn=[0,1,0];
+    for(const l of text.split('\n')){
+      const t=l.trim();
+      if(t.startsWith('facet normal')){const p=t.split(/\s+/);cn=[+p[2],+p[3],+p[4]];}
+      else if(t.startsWith('vertex')){const p=t.split(/\s+/);pos.push(+p[1],+p[2],+p[3]);nor.push(...cn);}
+    }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+    geo.setAttribute('normal',new THREE.BufferAttribute(new Float32Array(nor),3));
+    addToScene(geo,name,pos.length/3,pos.length/9);
+  }
+}
+
+function parsePLY(buf, name){
+  const txt=new TextDecoder().decode(buf);
+  const lines=txt.split('\n');
+  let nv=0,nf=0,he=0;
+  const props=[];
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i].trim();
+    if(l.startsWith('element vertex')) nv=+l.split(' ')[2];
+    if(l.startsWith('element face')) nf=+l.split(' ')[2];
+    if(l.startsWith('property')&&!l.includes('list')) props.push(l.split(' ').pop());
+    if(l==='end_header'){he=i+1;break;}
+  }
+  const xi=props.indexOf('x'),yi=props.indexOf('y'),zi=props.indexOf('z');
+  const vs=[];
+  for(let i=0;i<nv;i++){
+    const p=lines[he+i].trim().split(/\s+/);
+    vs.push(+p[xi],+p[yi],+p[zi]);
+  }
+  const pos=[];
+  for(let i=0;i<nf;i++){
+    const p=lines[he+nv+i].trim().split(/\s+/);
+    const cnt=+p[0];
+    const face=[];for(let j=1;j<=cnt;j++) face.push(+p[j]);
+    for(let j=1;j<face.length-1;j++){
+      [0,j,j+1].forEach(k=>{const vi=face[k];pos.push(vs[vi*3],vs[vi*3+1],vs[vi*3+2]);});
+    }
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+  geo.computeVertexNormals();
+  addToScene(geo,name,nv,nf);
+}
+
+function parseFallback(name){
+  // For GLTF/GLB show placeholder with nice message
+  const geo=new THREE.TorusKnotGeometry(1,0.35,180,20);
+  addToScene(geo,name,geo.attributes.position.count,geo.index?geo.index.count/3:geo.attributes.position.count/3);
+  showToast('GLTF preview (simplified geometry)','ok');
+}
+
+// ──────────────────────────────────────
+//  ADD MESH TO SCENE
+// ──────────────────────────────────────
+function addToScene(geo, name, numVerts, numFaces){
+  if(modelGroup){scene.remove(modelGroup);modelGroup=null;meshes=[];}
+  geo.computeBoundingBox();
+  const box=geo.boundingBox;
+  const center=new THREE.Vector3();box.getCenter(center);
+  const size=new THREE.Vector3();box.getSize(size);
+  const maxDim=Math.max(size.x,size.y,size.z)||1;
+  const scale=4/maxDim;
+  geo.translate(-center.x,-center.y,-center.z);
+
+  const mat=makeMat();
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.scale.setScalar(scale);
+  mesh.castShadow=true;
+  mesh.receiveShadow=true;
+  // Place above shadow plane
+  mesh.position.y = size.y*scale*0.5;
+
+  modelGroup=new THREE.Group();
+  modelGroup.add(mesh);
+  scene.add(modelGroup);
+  meshes=[mesh];
+
+  // Shadow plane y
+  shadowPlane.position.y=0;
+
+  orbit.target.set(0, mesh.position.y, 0);
+  orbit.radius=7;orbit.theta=0.6;orbit.phi=1.1;
+  applyCamera();
+
+  // Stats
+  document.getElementById('sv').textContent=fmt(numVerts);
+  document.getElementById('sf').textContent=fmt(Math.round(numFaces));
+  document.getElementById('se').textContent=fmt(Math.round(numFaces*1.5));
+  document.getElementById('so').textContent='1';
+
+  // Show HUD
+  document.getElementById('empty').classList.add('gone');
+  document.getElementById('hudTL').style.opacity='1';
+  document.getElementById('hudTR').style.opacity='1';
+  document.getElementById('hudHints').style.opacity='1';
+  axCanvas.style.opacity='1';
+
+  applyRenderMode();
+}
+
+function makeMat(){
+  return new THREE.MeshPhongMaterial({
+    color:new THREE.Color(matColor),
+    shininess:60,
+    specular:new THREE.Color(0x555555),
+  });
+}
+
+// ──────────────────────────────────────
+//  UI HELPERS
+// ──────────────────────────────────────
+function fmt(n){
+  if(n===undefined||isNaN(n)) return '—';
+  if(n<1e3) return String(Math.round(n));
+  if(n<1e6) return (n/1e3).toFixed(1)+'K';
+  return (n/1e6).toFixed(2)+'M';
+}
+
+function updateFileCard(file, t0){
+  const ext=file.name.split('.').pop().toUpperCase();
+  const sz=file.size<1024?file.size+'B':file.size<1048576?(file.size/1024).toFixed(1)+'KB':(file.size/1048576).toFixed(2)+'MB';
+  document.getElementById('fc-name').textContent=file.name;
+  document.getElementById('fc-fmt').textContent=ext;
+  document.getElementById('fc-sz').textContent=sz;
+  document.getElementById('fc-time').textContent=new Date().toLocaleTimeString();
+  document.getElementById('fc').classList.add('show');
+  document.getElementById('hLoaded').textContent=ext+' · '+sz;
+}
+
+let progT=null;
+function setProgress(pct){
+  const el=document.getElementById('prog');
+  if(pct===0){setTimeout(()=>{el.style.transition='none';el.style.width='0%';},600);return;}
+  el.style.transition='width 0.4s';
+  el.style.width=pct+'%';
+}
+
+let toastT=null;
+function showToast(msg,type='info'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.className='toast show '+(type==='err'?'err':type==='ok'?'ok':'info');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+// ──────────────────────────────────────
+//  CONTROLS
+// ──────────────────────────────────────
+function applyRenderMode(){
+  meshes.forEach(m=>{
+    m.material.dispose&&m.material.dispose();
+    if(renderMode==='wireframe'){
+      m.material=new THREE.MeshBasicMaterial({color:new THREE.Color(matColor),wireframe:true});
+    } else if(renderMode==='points'){
+      m.material=new THREE.PointsMaterial({color:new THREE.Color(matColor),size:0.015});
+      // Replace mesh with points
+      const pts=new THREE.Points(m.geometry,m.material);
+      pts.scale.copy(m.scale);pts.position.copy(m.position);
+      modelGroup.remove(m);modelGroup.add(pts);meshes=[pts];
+    } else if(renderMode==='flat'){
+      m.material=new THREE.MeshPhongMaterial({color:new THREE.Color(matColor),flatShading:true});
+    } else if(renderMode==='normal'){
+      m.material=new THREE.MeshNormalMaterial({flatShading:false});
+    } else {
+      m.material=makeMat();
+    }
+    if(m.material.color) m.material.color.set(matColor);
+  });
+  document.getElementById('hMode').textContent=renderMode.toUpperCase();
+}
+
+function onRenderMode(){
+  renderMode=document.getElementById('renderMode').value;
+  applyRenderMode();
+}
+
+function togRot(){
+  orbit.autoRot=!orbit.autoRot;
+  document.getElementById('togRot').classList.toggle('on',orbit.autoRot);
+}
+function togGrid(){
+  grid.visible=!grid.visible;
+  document.getElementById('togGrid').classList.toggle('on',grid.visible);
+}
+function togShadow(){
+  const on=!renderer.shadowMap.enabled;
+  renderer.shadowMap.enabled=on;
+  shadowPlane.visible=on;
+  document.getElementById('togShadow').classList.toggle('on',on);
+}
+function togBg(){
+  bgLight=!bgLight;
+  renderer.setClearColor(bgLight?0xf0eee8:0x05050a,1);
+  document.getElementById('togBg').classList.toggle('on',bgLight);
+}
+
+function pickColor(el){
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  matColor=el.dataset.c;
+  document.getElementById('customColor').value=matColor;
+  meshes.forEach(m=>{if(m.material.color)m.material.color.set(matColor);});
+}
+function customColor(el){
+  matColor=el.value;
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+  meshes.forEach(m=>{if(m.material.color)m.material.color.set(matColor);});
+}
+
+function setAmbient(v){ambLight.intensity=+v;}
+function setLight(v){sunLight.intensity=+v;}
+
+function setEnvPreset(){
+  const p=document.getElementById('envPreset').value;
+  const presets={
+    studio:{amb:0xffffff,sun:0xfff8f0,fill:0x8090ff,rim:0xff6b35},
+    sunset:{amb:0xffe0b0,sun:0xff8040,fill:0x3040a0,rim:0xff4020},
+    cool:{amb:0xe0f0ff,sun:0xd0e8ff,fill:0x6080ff,rim:0x00d4ff},
+    warm:{amb:0xfff0d0,sun:0xffcc80,fill:0xff8040,rim:0xffff80},
+  };
+  const c=presets[p];
+  ambLight.color.set(c.amb);sunLight.color.set(c.sun);fillLight.color.set(c.fill);rimLight.color.set(c.rim);
+}
+
+function resetCam(){orbit.theta=0.6;orbit.phi=1.1;orbit.radius=7;orbit.target.set(0,modelGroup?meshes[0].position.y:0,0);applyCamera();}
+function fitView(){resetCam();}
+function setView(v){
+  if(v==='top'){orbit.phi=0.01;orbit.theta=0;}
+  else if(v==='front'){orbit.phi=Math.PI/2;orbit.theta=0;}
+  applyCamera();
+}
+
+function takeScreenshot(){
+  renderer.render(scene,camera);
+  const a=document.createElement('a');
+  a.href=canvas.toDataURL('image/png');
+  a.download='forge-3d-'+Date.now()+'.png';
+  a.click();
+  showToast('Screenshot saved!','ok');
+}
+
+function clearScene(){
+  if(modelGroup){scene.remove(modelGroup);modelGroup=null;meshes=[];}
+  document.getElementById('empty').classList.remove('gone');
+  document.getElementById('hudTL').style.opacity='0';
+  document.getElementById('hudTR').style.opacity='0';
+  document.getElementById('hudHints').style.opacity='0';
+  axCanvas.style.opacity='0';
+  document.getElementById('fc').classList.remove('show');
+  ['sv','sf','se','so'].forEach(id=>document.getElementById(id).textContent='—');
+  fi.value='';
+}
+</script>
+</body>
+</html>
